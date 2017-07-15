@@ -14,4 +14,4 @@ main = shakeArgs shakeOptions{shakeFiles="_build"} $ do
     "dist//*.lua" %>  \out -> do
         let src = "src" </> (dropDirectory1 $ out -<.> "lisp")
         need [src]
-        cmd "lua" "/home/paul/doc/bin/urn/bin/urn.lua" src "-o" (out -<.> "") "-i" "lib" "--emit-lua"
+        cmd "urn" src "-o" (out -<.> "") "-i" "lib" "--emit-lua"
