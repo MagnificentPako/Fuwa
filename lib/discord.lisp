@@ -1,9 +1,10 @@
+(import os)
 (import json)
 (import http)
+(import ccemux)
 (import socket)
 (import eventually)
 (import lua/coroutine coroutine)
-
 
 (define websocket-url
     "The Discord WS url"
@@ -14,6 +15,15 @@
     "The Discord REST url"
     :hidden
     "https://discordapp.com/api/")
+
+(defun send-heartbeat (client)
+    "Sends a heartbeat to the client"
+    :hidden
+    (print! "SENDING HEARTBEAT")
+    (socket/write (.> client :socket) (json/stringify {
+        :op 1
+        :d (.> client :seq)
+    })))
 
 (defun build-headers (is-self token)
     "Returns the needed HTTP headers with the given token"
@@ -44,6 +54,9 @@
         :token token
         :is-self is-self
         :self nil
+        :last-time (ccemux/milliTime)
+        :heartbeat-interval -1
+        :seq -1
     })
 
 (defun run (client)
@@ -51,30 +64,38 @@
     (.<! client :socket (socket/websocket websocket-url))
     ; Consumes HELLO
     (with (sock (.> client :socket))
-        (socket/read-sync sock)
+        (with (hello (json/parse (socket/read-sync sock)))
+            (.<! client :heartbeat-interval (.> hello :d :heartbeat_interval)))
         (socket/write sock (json/stringify {
-        :op 2
-        :d {
-            :token (.> client :token)
-            :properties {
-                :$os "linux"
-                :$browser "Fuwa"
-                :$device "Fuwa"
-                :$referrer ""
-                :$referring_domain ""
-            }
-            :compress false
-            :large_threshold 250
-        }   
+            :op 2
+            :d {
+                :token (.> client :token)
+                :properties {
+                    :$os "linux"
+                    :$browser "Fuwa"
+                    :$device "Fuwa"
+                    :$referrer ""
+                    :$referring_domain ""
+                }
+                :compress false
+                :large_threshold 250
+            }   
         }))
         (with (ready (json/parse (socket/read-sync sock)))
+            (.<! client :seq (.> ready :s))
             (.<! client :self (.> ready :d :user))
             (eventually/dispatch (.> client :event-handler) (list "READY" (.> ready :d))))
         (while true
+            (unless (>= (+ (.> client :last-time ) (.> client :heartbeat-interval)) (ccemux/milliTime))
+                (.<! client :last-time (ccemux/milliTime))
+                (send-heartbeat client))
             (with [r (socket/read sock)]
-                (coroutine/yield)
+                (os/queueEvent "derp")
+                (coroutine/yield "derp")
                 (unless (or (= r nil) (= (len# r) 0))
                     (let* [(parsed  (json/parse r))
                         (type    (.> parsed :t))
-                        (payload (.> parsed :d))]
+                        (payload (.> parsed :d))
+                        (seq     (.> parsed :s))]
+                        (.<! client :seq seq)
                         (eventually/dispatch (.> client :event-handler) (list type payload))))))))

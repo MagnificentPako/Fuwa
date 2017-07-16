@@ -1,0 +1,7 @@
+(define-native closeEmu)
+(define-native echo)
+(define-native getVersion)
+(define-native milliTime)
+(define-native openDataDir)
+(define-native openEmu)
+(define-native setClipboard)

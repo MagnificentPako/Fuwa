@@ -130,8 +130,8 @@ local _temp = (function()
 	end
 	return json
 end)()
-for k, v in pairs(_temp) do _libs["json-17/".. k] = v end
-local _3d_1, _2f3d_1, _3c_1, _3c3d_1, _3e3d_1, _2b_1, _2d_1, _2e2e_1, len_23_1, error1, print1, getIdx1, setIdx_21_1, type_23_1, n1, slice1, format1, unpack1, car1, cdr1, list1, apply1, empty_3f_1, type1, car2, cdr2, filter1, nth1, pushCdr_21_1, close1, open1, self1, parse1, stringify1, post1, yield1, websocket1, write1, read1, readSync1, newHandler1, dispatch1, add1, buildHeaders1, postRequest1, sendMessage1, addHandler1, create1, run1
+for k, v in pairs(_temp) do _libs["json-18/".. k] = v end
+local _3d_1, _2f3d_1, _3c_1, _3c3d_1, _3e3d_1, _2b_1, _2d_1, _2e2e_1, len_23_1, error1, print1, getIdx1, setIdx_21_1, type_23_1, n1, slice1, format1, unpack1, car1, cdr1, list1, apply1, empty_3f_1, type1, car2, cdr2, filter1, nth1, pushCdr_21_1, close1, open1, self1, queueEvent1, parse1, stringify1, post1, milliTime1, yield1, websocket1, write1, read1, readSync1, newHandler1, dispatch1, add1, sendHeartbeat1, buildHeaders1, postRequest1, sendMessage1, addHandler1, create1, run1
 _3d_1 = function(v1, v2) return v1 == v2 end
 _2f3d_1 = function(v1, v2) return v1 ~= v2 end
 _3c_1 = function(v1, v2) return v1 < v2 end
@@ -266,9 +266,11 @@ self1 = (function(x, key, ...)
 	local args = _pack(...) args.tag = "list"
 	return x[key](x, unpack1(args, 1, n1(args)))
 end)
-parse1 = _libs["json-17/parse"]
-stringify1 = _libs["json-17/stringify"]
+queueEvent1 = os.queueEvent
+parse1 = _libs["json-18/parse"]
+stringify1 = _libs["json-18/stringify"]
 post1 = http.post
+milliTime1 = ccemux.milliTime
 yield1 = coroutine.yield
 websocket1 = socket.websocket
 write1 = (function(sock, dat)
@@ -303,6 +305,10 @@ end)
 add1 = (function(handler, evt, fun)
 	return pushCdr_21_1(handler, list1(evt, fun))
 end)
+sendHeartbeat1 = (function(client)
+	print1("SENDING HEARTBEAT")
+	return write1(client["socket"], stringify1(({["op"]=1,["d"]=client["seq"]})))
+end)
 buildHeaders1 = (function(isSelf, token)
 	return ({["User-Agent"]="Fuwa (https://github.com/MagnificentPako/Fuwa, 1)",["Authorization"]=(function()
 		if isSelf then
@@ -322,22 +328,29 @@ addHandler1 = (function(client, evt, handler)
 	return add1(client["event-handler"], evt, handler)
 end)
 create1 = (function(token, isSelf)
-	return ({["event-handler"]=newHandler1(),["socket"]=nil,["token"]=token,["is-self"]=isSelf,["self"]=nil})
+	return ({["event-handler"]=newHandler1(),["socket"]=nil,["token"]=token,["is-self"]=isSelf,["self"]=nil,["last-time"]=milliTime1(),["heartbeat-interval"]=-1,["seq"]=-1})
 end)
 run1 = (function(client)
 	client["socket"] = websocket1("wss://gateway.discord.gg/?v=5&encoding=json")
 	local sock = client["socket"]
-	readSync1(sock)
+	client["heartbeat-interval"] = parse1(readSync1(sock))["d"]["heartbeat_interval"]
 	write1(sock, stringify1(({["op"]=2,["d"]=({["token"]=client["token"],["properties"]=({["$os"]="linux",["$browser"]="Fuwa",["$device"]="Fuwa",["$referrer"]="",["$referring_domain"]=""}),["compress"]=false,["large_threshold"]=250})})))
 	local ready = parse1(readSync1(sock))
+	client["seq"] = ready["s"]
 	client["self"] = ready["d"]["user"]
 	dispatch1(client["event-handler"], list1("READY", ready["d"]))
 	while true do
+		if not (client["last-time"] + client["heartbeat-interval"] >= milliTime1()) then
+			client["last-time"] = milliTime1()
+			sendHeartbeat1(client)
+		end
 		local r = read1(sock)
-		yield1()
+		queueEvent1("derp")
+		yield1("derp")
 		if not (r == nil or #r == 0) then
 			local parsed = parse1(r)
-			local type, payload = parsed["t"], parsed["d"]
+			local type, payload, seq = parsed["t"], parsed["d"], parsed["s"]
+			client["seq"] = seq
 			dispatch1(client["event-handler"], list1(type, payload))
 		end
 	end
@@ -354,8 +367,7 @@ addHandler1(client, "MESSAGE_CREATE", (function(msg)
 	if (msg["author"]["id"] == client["self"]["id"]) then
 		return nil
 	else
-		sendMessage1(client, msg["channel_id"], ({["content"]="test"}))
-		return print1(msg["author"]["discriminator"] .. ": " .. msg["content"])
+		return sendMessage1(client, msg["channel_id"], ({["content"]="test"}))
 	end
 end))
 return run1(client)
