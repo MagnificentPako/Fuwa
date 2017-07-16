@@ -6,9 +6,13 @@
         (set! token (self handle :read "*a"))
         (io/close handle))
 
-    (print! token)
+    (with (client (discord/create token false))
 
-    (discord/add-handler "ready" (lambda (ready)
+        (discord/add-handler client "READY" (lambda (ready)
         (print! (.. "logged in as " (.> ready :user :username) "."))))
 
-    (discord/login token))
+        (discord/add-handler client "MESSAGE_CREATE" (lambda (msg)
+            (unless (= (.> msg :author :id) (.> client :self :id))
+                (discord/send-message client (.> msg :channel_id) { :content "test" }))))
+
+        (discord/run client)))
